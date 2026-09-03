@@ -1,0 +1,59 @@
+# Render Blueprint for Stash — https://render.com/docs/blueprint-spec
+#
+# Root Directory is intentionally left unset on both services (defaults to
+# the repo root) — this is an npm workspaces monorepo, and `@stash/domain`
+# only resolves correctly when `npm install` runs from the root.
+#
+# Deploy order matters, because the two services reference each other by
+# URL and neither is known until the other has deployed once:
+#   1. Deploy this blueprint. Both services will come up, but CORS
+#      (WEB_ORIGIN) and the API base URL (VITE_API_BASE_URL) will be wrong
+#      until step 2/3 below.
+#   2. Once stash-api is live, note its URL (Render dashboard), and set it
+#      as stash-web's VITE_API_BASE_URL env var — this only takes effect on
+#      static sites' NEXT build, so trigger a manual redeploy of stash-web.
+#   3. Once stash-web is live, note its URL, and set it as stash-api's
+#      WEB_ORIGIN env var — Render redeploys stash-api automatically on
+#      env var change.
+#   4. Run migrations once, from your own machine, against the same
+#      DATABASE_URL: `npm run migrate --workspace apps/api`.
+#
+# DATABASE_URL and the two cross-service URLs are `sync: false` — Render
+# prompts for them in the dashboard rather than storing real values (or
+# guesses that could be wrong if Render assigns a service a different slug
+# than requested) in this committed file.
+
+services:
+  - name: stash-api
+    type: web
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start --workspace apps/api
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      # Set to stash-web's real URL once it exists (step 3 above) — e.g.
+      # https://stash-web.onrender.com. Do not set PORT: Render injects it,
+      # and apps/api/src/index.ts already reads process.env.PORT.
+      - key: WEB_ORIGIN
+        sync: false
+
+  - name: stash-web
+    type: web
+    runtime: static
+    buildCommand: npm install && npm run build --workspace apps/web
+    staticPublishPath: apps/web/dist
+    envVars:
+      # Set to stash-api's real URL once it exists (step 2 above) — e.g.
+      # https://stash-api.onrender.com. Baked into the static bundle at
+      # BUILD time (Vite), so a redeploy is required after changing this,
+      # not just a restart.
+      - key: VITE_API_BASE_URL
+        sync: false
+    routes:
+      # Client-side routing (react-router's BrowserRouter) — without this,
+      # refreshing on any route but "/" (e.g. /savings, /activity) 404s.
+      - type: rewrite
+        source: /*
+        destination: /index.html
