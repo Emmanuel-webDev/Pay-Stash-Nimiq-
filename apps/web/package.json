@@ -12,8 +12,11 @@
   "dependencies": {
     "@nimiq/core": "^2.21.0",
     "@nimiq/mini-app-sdk": "^0.1.0",
+    "@stash/domain": "*",
+    "lucide-react": "^1.38.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

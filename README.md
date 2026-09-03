@@ -11,10 +11,27 @@ Implementation follows `BUILD_UPDATED.md` §21's phase order. Status:
 - **Phase 1 (domain engine)** — done. Pure calculation logic has no
   dependency on the blockchain-integration questions below, so it didn't
   need to wait on Phase 0's live verification.
-- **Phase 2 (persistence)** — schema + goal CRUD done, against a real
-  Postgres/Supabase instance (no mocked DB). **Auth is explicitly not
-  done** — see "Phase 2 — persistence" below for why.
-- Phase 3 onward (product UI, real sweep flow, hardening) — not started.
+- **Phase 2 (persistence + auth) — DONE.** Schema + goal CRUD against a real
+  Postgres/Supabase instance (no mocked DB), extended in Phase 3 with
+  obligations/sweeps routes. Signed-challenge wallet auth
+  (`apps/api/src/auth.ts`) is implemented and every mutating route requires
+  it — see "Phase 2 — persistence + auth" below. Verified end-to-end,
+  including a real on-device Nimiq Pay `provider.sign()` round trip (device
+  test run 2026-09-01, over a LAN URL from `vite --host`): the wallet
+  connected, the sign prompt appeared, the server verified the signature and
+  issued a session, and an authenticated `GET /api/goals` request from the
+  device succeeded immediately after. That test also settled the one open
+  question this phase carried — which message-signing scheme Nimiq Pay's
+  `provider.sign()` uses — confirming the Nimiq Hub-style prefixed-SHA256
+  scheme; the speculative raw-bytes fallback has been removed.
+- **Phase 3 (product UI) — built, not yet device-verified.** All 5 screens
+  (Home, Savings, Pay & Stash, Catch-up, Activity) are live, wired to real
+  wallet/chain/API calls, typecheck clean, and render correctly in a real
+  browser with zero console errors (verified). The Pay & Stash send flow,
+  Savings goal creation, and Catch-up sweep all need a real Nimiq Pay
+  session to actually exercise — that's the same category of limitation as
+  Phase 0's wallet calls, not done yet. See "Phase 3 — product UI" below.
+- Phase 4 onward (hardening) — not started.
 
 ## What's here
 
@@ -24,6 +41,63 @@ apps/api        Fastify + TS backend (goal persistence only — see architecture
 packages/domain Pure savings-rule engine, tx classification, obligation ledger (Phase 1)
 migrations      SQL schema (Phase 2), applied via `npm run migrate --workspace apps/api`
 ```
+
+## Known limitation: Stash cannot detect spending made outside the app
+
+Stash cannot automatically detect a payment a user makes outside Stash's own
+Pay & Stash flow. Earlier drafts of this project described that as
+Catch-up's fallback source ("spending detected after the fact from chain
+history") — that's not implementable on this platform, confirmed with real
+testnet data, not a gap left for later.
+
+**Why**: Nimiq Pay sends every payment through an HTLC (hashed time-locked
+contract) it creates itself, not directly from the connected wallet. A
+wallet's own transaction history — from the public RPC's
+`getTransactionsByAddress` (`apps/api/src/nimiqRpc.ts`), which is what
+Activity, payment verification, and the reconciler actually read from —
+only includes transactions where that wallet is literally the `from` or
+`to` address. It does not include transactions where the wallet only
+appears in `relatedAddresses`, which is exactly what happens for every real
+Nimiq-Pay-routed payment. Querying a wallet's own address therefore cannot
+surface a payment made through Nimiq Pay, no matter how the query is
+structured.
+
+**Evidence** (real TestAlbatross data):
+
+- `getTransactionsByAddress` for wallet `NQ36 9F2P L44G 8TS0 XTP1 6KH0 N0GA
+  6PXA CV8M` returned only 5 transactions, the newest at block 10409626.
+- Two real payments made through Nimiq Pay from that same wallet are absent
+  from that result, despite both containing NQ36 in `relatedAddresses`:
+  `672b586759ff0a039052fec3e114367d263de758fde1c30f6f0ccca08b4db056` (block
+  10441970) and
+  `52730624d6f0de35355d5af8018842b80674a39668f813d26f420c8268bc7304` (block
+  10444533).
+- `ef690b474fdb21870e39ecf582d7e8e418fb88ec07759b3bdd8a8c58db7f0419` is the
+  real TestAlbatross faucet (NQ37 → NQ36, 110,000 NIM, a real fee) sending
+  directly to a basic account — confirming the faucet itself never touches
+  HTLCs; Nimiq Pay's own send mechanism does, for its own payments only.
+
+**What Stash actually tracks**: the Pay & Stash flow (payment and savings,
+both explicit user-approved transactions made through Stash) and a skipped
+Pay & Stash savings leg, which lands in Catch-up (`source:
+'skipped_savings'`). What it cannot track: spending made through Nimiq
+Pay's normal payment flow without going through Stash's own Pay & Stash
+screen. Activity correctly shows nothing for a wallet whose spending all
+went through Nimiq Pay — that's not a bug, it's this limitation surfacing
+honestly rather than silently.
+
+**Planned fix, out of scope for this submission — a two-hop scan.** A
+wallet's contract-creation transactions (`flags: 1`, `toType: 2` — the
+wallet funding an HTLC) *are* visible in its own history, since the wallet
+genuinely is `from` on those. The real payment lives in that HTLC address's
+own transaction history instead, which a second, direct scan of the HTLC
+address correctly indexes. Verified viable: querying
+`getTransactionsByAddress` directly for HTLC address `NQ59 RCVY 8X71 0XY8
+YAYB 7RAS B9J3 KBHG CE5Y` returned all three of its real transactions. Not
+implemented here — the classification logic and the server-side endpoint
+that would consume the second hop's results (`POST
+/api/goals/:goalId/obligations`, `apps/api/src/obligations.ts`) already
+exist and are correct; only the first-hop-to-second-hop wiring is missing.
 
 ## Architecture: no RPC endpoint, by necessity
 
@@ -214,10 +288,11 @@ Luna — no floats anywhere in the money path. 30 unit tests
 zero and near-total-supply values, and all three exclusion types, including
 same-batch and cross-run duplicate-tx dedup.
 
-Not yet wired into `apps/web`; wired into `apps/api`'s goal validation (see
-below).
+Wired into both `apps/api` (goal validation, obligation classification —
+see Phase 2/3 below) and `apps/web` (Pay & Stash's live obligation preview
+and Luna formatting — see Phase 3 below).
 
-## Phase 2 — persistence (`migrations/`, `apps/api/src/{db,migrate,goals}.ts`)
+## Phase 2 — persistence + auth (`migrations/`, `apps/api/src/{db,migrate,goals,auth}.ts`)
 
 Schema from `BUILD_UPDATED.md` §15 (`profiles`, `goals`, `observed_transactions`,
 `obligations`, `sweeps`, `sweep_obligations`), all Luna amounts as `bigint`
@@ -238,17 +313,161 @@ table names in application code still resolve correctly. If Stash ever gets
 its own dedicated Supabase project, this namespacing is harmless to keep —
 but it's load-bearing as long as the project is shared.
 
-**Auth is deliberately not implemented yet, and the goal routes are
-correspondingly insecure right now** (a request just self-reports
-`ownerAddress` — nothing verifies it owns that wallet, which
-`BUILD_UPDATED.md` §19 explicitly forbids for production writes). §8's
-signed-challenge flow (`nimiq.sign()` → server verifies) needs Nimiq's exact
-signature scheme and address-derivation algorithm confirmed first, the same
-way the SDK's real methods were confirmed in Phase 0 — I have not verified
-that yet and didn't want to guess cryptographic verification code. Treat
-`/api/goals` as a schema/persistence proof, not a secured API, until that
-lands.
+**Supabase's direct-connection host (`db.<ref>.supabase.co`) is IPv6-only.**
+On an IPv4-only network, `DATABASE_URL` needs Supabase's Session/Transaction
+Pooler host instead (`aws-0-<region>.pooler.supabase.com`, username
+`postgres.<project-ref>` rather than plain `postgres`) — see
+`apps/api/.env.example`.
+
+### Signed-challenge wallet auth (`apps/api/src/auth.ts`)
+
+Implements `BUILD_UPDATED.md` §8/§19: every mutating route (`POST`/`PATCH`/
+`DELETE` on goals, obligations, sweeps) now requires a valid session bearer
+token instead of trusting a self-reported `ownerAddress` body field.
+
+Flow: `POST /api/auth/challenge {walletAddress}` → server generates a
+single-use nonce (5 min TTL, stored in `auth_nonces`) and returns a
+deterministic, domain-specific message (`"Stash Authentication\nWallet:
+...\nNonce: ...\nIssued At: ...\nPurpose: Authenticate to Stash"`) → the
+client signs that exact string with `@nimiq/mini-app-sdk`'s
+`provider.sign()` → `POST /api/auth/verify {walletAddress, nonce, publicKey,
+signature}` → the server reconstructs the message itself (never trusts a
+client-supplied message string), derives the Nimiq address from `publicKey`
+via `@nimiq/core`'s `PublicKey.toAddress()` and requires it to exactly match
+`walletAddress`, verifies the Ed25519 signature via `PublicKey.verify()`,
+marks the nonce used atomically with verification (row-locked, so a
+concurrent replay can't slip through), and issues a 12h bearer token —
+stored server-side only as `SHA256(token)` (`sessions` table), never the raw
+value. `requireAuth` (a Fastify `preHandler`) resolves the token on every
+mutating request into `request.walletAddress`.
+
+**Signing scheme — confirmed on-device, 2026-09-01.** Nimiq's documented
+message-signing convention (Nimiq Hub API's `signMessage`) prefixes the
+message with `'\x16Nimiq Signed Message:\n' + message.length` before
+SHA256-hashing and signing — this stops a signed message from being
+replayable as a valid transaction. It wasn't confirmed by documentation
+alone whether the Mini App SDK's `provider.sign()` (a different host app,
+Nimiq Pay, not Nimiq Hub) applies the same prefix, so `verifySignedChallenge`
+temporarily tried both that scheme and raw-UTF8-bytes signing, logging which
+one matched. A real device connected over `vite --host`'s LAN URL, approved
+the sign prompt in Nimiq Pay, and the server logged
+`[auth] signature verified via scheme: nimiq-prefixed-sha256` — confirming
+Nimiq Pay uses the same convention as Nimiq Hub. The raw-bytes fallback has
+been deleted from `auth.ts`; only the confirmed scheme remains.
+
+Also verified end-to-end (self-generated keypair, real HTTP round trips
+against the real DB, before the device test): unauthenticated writes get
+401; a reused nonce is rejected; an expired nonce is rejected; a corrupted
+signature is rejected; a signature from a different wallet's key is rejected
+(address-derivation mismatch, checked before signature verification even
+runs); an invalid bearer token is rejected; a valid session successfully
+authenticates a mutating request.
+
+Phase 3 added obligation/sweep routes on top of this schema — see below.
+
+## Phase 3 — product UI (`apps/web/src/{routes,components,state,lib}`)
+
+### Product pivot: Pay & Stash is primary, not the passive sweep
+
+Original scope (`BUILD_UPDATED.md`'s first draft) was passive-only: Stash
+watches spending after the fact, accumulates one "Ready to Stash" total,
+one sweep button. `design.md` — the Hallmark UI prototype's design system —
+specifies a different primary loop: **Pay & Stash**, where the user pays a
+merchant *through* Stash and is prompted to save in the same flow, with the
+passive loop demoted to **Catch-up**, the fallback for spending Stash
+didn't actively prompt (a skipped Pay & Stash save, or spending detected
+after the fact). `BUILD_UPDATED.md` §1 now carries a reconciliation note
+making this explicit; treat `design.md` as authoritative for product UX,
+not just visuals. The existing domain/backend work was **extended, not
+discarded** — see below.
+
+### Domain: `ObligationSource`
+
+`packages/domain/src/ledger.ts` now tags every obligation with where it
+came from: `'pay_and_stash'` (saved immediately, same flow as the payment),
+`'skipped_savings'` (Pay & Stash payment went through, the save was
+skipped/rejected), or `'external_spend'` (the original passive detection —
+never actively prompted). `buildObligations` takes this as a required
+`source` param rather than assuming one; **classification always runs
+regardless of source** — a caller can't manufacture an obligation just by
+claiming `'pay_and_stash'` for an ineligible transaction (covered by a
+domain test using a payment misdirected at the stash destination itself).
+32 unit tests total.
+
+### Backend: obligations and sweeps (`apps/api/src/{obligations,sweeps,goalAccess}.ts`)
+
+New routes, all live-tested against the real Supabase instance (created a
+goal, posted obligations both ways, deduped a re-post, swept, hit the
+re-sweep-conflict guard, skipped a Pay & Stash obligation, and confirmed a
+misdirected `pay_and_stash` claim gets classified away rather than trusted):
+
+```text
+POST   /api/goals/:goalId/obligations         — classify + record; source is caller-claimed, classification is not
+GET    /api/goals/:goalId/obligations         — list (optional ?status=pending|swept), joined with recipient
+GET    /api/goals/:goalId/ready-to-stash       — sum of pending obligations
+PATCH  /api/goals/:goalId/obligations/:id/skip — pay_and_stash + pending only → skipped_savings
+POST   /api/goals/:goalId/sweeps               — records a sweep, marks its obligations swept
+GET    /api/goals/:goalId/sweeps/:sweepId
+```
+
+**Known limitation, same root cause as Phase 0's RPC gap**: obligations are
+marked `swept` as soon as a sweep is recorded, not after independent
+on-chain re-verification — `BUILD_UPDATED.md` §12 wants the latter, but
+that needs the backend to have its own chain reader, which this
+architecture doesn't have (`@nimiq/core`'s light client runs in the
+browser, not the backend). The frontend only calls this after Nimiq Pay's
+own native confirmation succeeds and after independently finding the real
+transaction on-chain itself (see below) — real evidence, just not
+re-verified server-side. Revisit if the backend ever gets chain access.
+
+Migration `0002_obligation_source.sql` adds the `source` column (backfilled
+`'external_spend'` for any pre-existing rows, no default going forward —
+every insert site must say explicitly where an obligation came from).
+
+### Frontend: routes, state, and the trust boundary for tx hashes
+
+`AppStateProvider` (`apps/web/src/state/AppState.tsx`) centralizes wallet
+connection, the chain reader, and the active goal (Cycle II MVP: one active
+goal per wallet) so every screen shares one source of truth instead of
+re-deriving it. Five routes under a shared `Shell` (top bar with the
+Stash mark + centered Activity button + wallet chip disclosure; bottom nav
+Home/Savings/Pay/Catch-up, matching `design.md` §7 exactly):
+
+- **Home** — active rule, goal progress (derived from real swept
+  obligations, not a stored "balance" — `BUILD_UPDATED.md` §13), the Pay &
+  Stash CTA, a Catch-up banner when anything's pending.
+- **Savings** — doubles as both "Create Stash" (no goal yet) and "Goal
+  Settings" (goal exists) — `design.md`'s bottom nav has no separate
+  Settings tab, so this is where goal editing lives.
+- **Pay** — the Pay & Stash flow as one component with an internal state
+  machine (form → review → paying → confirming → savings-approval →
+  stashing → success/partial), not separate routes per step, since these
+  are flow states within one wizard, not independently navigable pages.
+- **Catch-up** — pending obligations with checkboxes (unchecking one only
+  excludes it from *this* sweep, per `design.md` — it's a local UI action,
+  not a delete), one sweep-all action.
+- **Activity** — real confirmed outgoing transactions from the live chain
+  reader, cross-referenced against obligations for the "+X NIM to Stash"
+  line. No invented merchant names, ever — shortened recipient addresses only.
+
+**Never trust `sendBasicTransaction()`'s return value as a tx hash** — its
+exact meaning is still unconfirmed (see "Verified vs. unverified" above).
+Instead, `findOutgoingTransaction` (`chainClient.ts`) independently looks
+up the just-sent transaction on-chain by matching sender/recipient/value,
+and only that real, chain-confirmed hash gets recorded via the obligations/
+sweeps API. Both the payment leg and the savings leg of Pay & Stash do
+this, as does the Catch-up sweep.
+
+### What's verified vs. not
+
+Typechecks clean across all three workspaces, production build succeeds,
+and the app was driven in a real Chrome browser through every route in its
+pre-wallet-connect state with zero console errors. **Not yet exercised**:
+actually creating a goal, running the Pay & Stash send flow, or approving a
+Catch-up sweep — all three need a real Nimiq Pay session, the same
+category of gap as Phase 0 before its device pass. Do that next the same
+way: `npm run dev -- --host` on this machine, load the LAN URL inside
+Nimiq Pay in testnet mode.
 
 See `BUILD_UPDATED.md` and `design.md` in the repo root for the full product
-spec and visual design system — neither fully applies yet; the design system
-in particular is Phase 3 (product UI), not this spike.
+spec and visual design system.

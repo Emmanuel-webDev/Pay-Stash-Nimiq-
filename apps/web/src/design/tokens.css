@@ -1,0 +1,111 @@
+/* Design tokens from design.md §4–§6, §10. Values copied verbatim — treat
+   design.md as the source of truth, not this file, if they ever diverge. */
+
+:root {
+  --color-paper: oklch(95.8% 0.006 90);
+  --color-surface: oklch(98.5% 0.004 90);
+  --color-surface-2: oklch(88% 0.008 90);
+
+  --color-ink: oklch(18% 0.008 90);
+  --color-ink-soft: oklch(46% 0.008 90);
+  --color-line: oklch(78% 0.008 90);
+
+  --color-accent: oklch(66% 0.20 52);
+  --color-accent-hover: oklch(59% 0.20 52);
+  --color-accent-soft: oklch(89% 0.08 57);
+  --color-accent-ink: oklch(18% 0.008 90);
+
+  --color-dark: oklch(18% 0.008 90);
+  --color-dark-soft: oklch(27% 0.012 90);
+  --color-dark-ink: oklch(98% 0.004 90);
+
+  --color-success: oklch(45% 0.11 150);
+  --color-success-soft: oklch(88% 0.055 150);
+  --color-danger: oklch(51% 0.15 25);
+  --color-danger-soft: oklch(91% 0.055 25);
+  --color-focus: oklch(48% 0.18 260);
+
+  --font-display: 'DM Sans', ui-sans-serif, sans-serif;
+  --font-body: 'Manrope', ui-sans-serif, sans-serif;
+
+  --space-3xs: 4px;
+  --space-2xs: 8px;
+  --space-xs: 12px;
+  --space-sm: 16px;
+  --space-md: 24px;
+  --space-lg: 32px;
+  --space-xl: 48px;
+  --space-2xl: 64px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --shadow-soft: 0 18px 44px oklch(35% 0.03 90 / 0.10);
+  --shadow-button: 0 10px 24px oklch(50% 0.12 52 / 0.20);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --z-nav: 20;
+  --z-popover: 25;
+  --z-toast: 30;
+}
+
+/* Missing this was the root cause of layout overflow on narrow screens:
+   any element with padding/border AND a percentage width blows past its
+   container without border-box sizing. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: clip;
+  width: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
