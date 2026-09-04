@@ -26,6 +26,26 @@ The two legs are never presented as atomic. They are two separate transactions w
 
 ---
 
+## Screenshots
+
+Running live inside Nimiq Pay on TestAlbatross. Real goals, real amounts, real transactions.
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/01-home.jpg) | ![Payment review](docs/screenshots/02-review.jpg) |
+| **Home** — active rule, live goal progress derived from verified sweeps | **Payment review** — both amounts, and an explicit statement that this is two separate approvals |
+
+| | |
+|---|---|
+| ![Nimiq Pay approval](docs/screenshots/03-approval.jpg) | ![Goal complete](docs/screenshots/04-Complete%20(2).jpg) |
+| **Nimiq Pay approval** — the native confirmation screen. The Message field carries the server-generated intent ID, which is how the backend later verifies this exact transaction | **Goal complete** — server-derived from verified sweeps, never from a client claim |
+
+![Catch-up](docs/screenshots/05-catchup.jpg)
+
+**Catch-up** — savings legs that were skipped, collected into a single approval.
+
+---
+
 ## Why the wallet is load-bearing
 
 Remove Nimiq Pay and Stash stops existing. The product is not a tracker with a wallet bolted on:
