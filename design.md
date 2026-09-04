@@ -29,33 +29,47 @@ Changing the savings rule, goal, or destination applies to future spending only.
 
 ## 2. Brand identity
 
-### Primary logo: Stash loop mark
+### Primary logo: Stash mark (updated 2026-09-04)
 
-The prototype uses a custom inline SVG mark that draws a compact lowercase `s` as a continuous rounded loop. It sits inside a warm orange-red rounded square.
+**Superseded the loop-mark construction below it in this file's earlier
+draft** — this is the mark actually shipped, in
+`apps/web/src/assets/logo.svg` (and reused as `apps/web/public/favicon.svg`).
+It's a dark rounded square with three warm-orange stacked bars: rising bar
+weight top to bottom, meant to read as a small stack of savings building up
+rather than a continuous loop.
 
-**Meaning:** a small repeatable action that builds into a habit.
+**Meaning:** a small repeatable action, building into a visible stack.
 
-**Primary construction:**
+**Primary construction** (the real, complete asset — self-contained, not a
+`currentColor` icon layered on a separately-colored container):
 
 ```svg
-<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-  <path
-    d="M7 8.2c0-1.7 1.8-3.1 5-3.1s5 1.3 5 3.1-1.8 2.6-5 3.1-5 1.4-5 3.1 1.8 3.1 5 3.1 5-1.3 5-3.1"
-    stroke="currentColor"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Stash logo mark</title>
+  <desc id="desc">A dark rounded square with three warm orange stacked bars.</desc>
+  <style>
+    :root {
+      --color-dark: oklch(18% 0.008 90);
+      --color-accent: oklch(66% 0.20 52);
+    }
+    .tile { fill: var(--color-dark); }
+    .bar { fill: var(--color-accent); }
+  </style>
+  <rect class="tile" x="32" y="32" width="448" height="448" rx="128" />
+  <rect class="bar" x="140" y="174" width="142" height="38" rx="19" />
+  <rect class="bar" x="140" y="237" width="180" height="38" rx="19" />
+  <rect class="bar" x="140" y="300" width="222" height="38" rx="19" />
 </svg>
 ```
 
-**Mark container:**
+**Mark container** (`.brand-mark` / `.brand-mark img` in `Shell.css`):
 
-- Size: `34px Ã— 34px` in the top bar
-- Shape: `12px` corner radius
-- Fill: `var(--color-accent)`
-- Icon color: `var(--color-accent-ink)`
-- SVG size: `22px Ã— 22px`
-- Stroke width: `2.6`
+- Size: `34px × 34px` in the top bar
+- Shape: `12px` corner radius, `overflow: hidden`
+- The SVG is the *entire* tile — both the dark background and the bars are
+  baked into the asset itself (`viewBox="0 0 512 512"`), rendered via
+  `<img>` with `object-fit: cover`, not drawn as a separate icon on top of
+  a container background color
 - No gradient
 - No additional outline
 
@@ -77,7 +91,7 @@ The wordmark is lowercase: `stash`. Keep it visually close to the mark. Do not a
 The preferred mobile lockup is:
 
 ```text
-[ S loop mark ] stash
+[ dark tile, 3 orange bars ] stash
 ```
 
 The earlier host label, `Nimiq Pay`, was removed from the refreshed prototype to keep the header lighter. Host context can appear elsewhere when needed, but it should not compete with the wallet state.
@@ -85,8 +99,8 @@ The earlier host label, `Nimiq Pay`, was removed from the refreshed prototype to
 ### Logo usage rules
 
 - Use the full lockup in the top bar.
-- Use the loop mark alone for compact contexts, app icons, loading placeholders, and avatars.
-- Keep the mark on the accent tile, not on a dark tile.
+- Use the mark alone for compact contexts, app icons, loading placeholders, favicons, and avatars — it's already a complete, self-contained square.
+- The mark *is* the dark tile — do not place it on a separate accent-colored container, and do not recolor the tile to accent.
 - Do not rotate, stretch, outline, or place the mark over a gradient.
 - Do not replace the mark with a generic wallet, coin, piggy bank, or crypto symbol.
 - Maintain clear space equal to at least `8px` around the mark.
@@ -239,7 +253,7 @@ The palette is restrained and warm. Orange-red is reserved for action, selected 
 - Surface 2 is used for progress tracks, quiet notes, and inactive control backgrounds.
 - Ink is primary text and dark action surfaces.
 - Ink soft is secondary text and metadata.
-- Accent is for primary actions, progress fill, selected radio states, and the logo tile.
+- Accent is for primary actions, progress fill, selected radio states, and the logo mark's bars — not the logo's tile background, which is dark (see §2).
 - Accent soft is for guidance modules, selected setup rows, and approval callouts.
 - Dark is for attention moments and calculation blocks.
 - Success is for verified states and the connected wallet indicator.

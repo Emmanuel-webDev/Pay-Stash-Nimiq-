@@ -131,7 +131,14 @@ export function Pay() {
         data: savingsIntent.intentId,
       })
       if (typeof result !== 'string') {
-        setFlow({ step: 'error', message: result.error.message })
+        // Nothing was ever broadcast (rejected, insufficient balance,
+        // etc.) — the exact same safe outcome as choosing "Skip for now":
+        // the merchant payment already stands, and this amount is a
+        // pending obligation Catch-up will pick up once there's enough to
+        // cover it. Treating it as a generic error here would be scarier
+        // than the truth and wouldn't point the user at the actual
+        // recovery path.
+        setFlow({ step: 'partial', missedLuna: BigInt(obligation.calculated_luna) })
         return
       }
       const txHash = result
@@ -144,10 +151,18 @@ export function Pay() {
           setFlow({ step: 'success', stashedLuna: BigInt(obligation.calculated_luna) })
           void refetchGoal()
         },
+        // Deliberately NOT the same 'partial' treatment as above: a
+        // txHash exists here, meaning something was actually broadcast
+        // and Stash's own verification rejected it — a materially
+        // different, more serious case than "nothing was ever sent",
+        // worth the user's attention rather than being quietly folded
+        // into "safe, catch up later."
         onTerminalError: (message) => setFlow({ step: 'error', message }),
       })
-    } catch (err) {
-      setFlow({ step: 'error', message: err instanceof Error ? err.message : String(err) })
+    } catch {
+      // sendBasicTransactionWithData threw before anything was broadcast —
+      // same reasoning as the branch above.
+      setFlow({ step: 'partial', missedLuna: BigInt(obligation.calculated_luna) })
     }
   }
 

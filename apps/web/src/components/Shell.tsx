@@ -10,6 +10,12 @@ function navItemClass({ isActive }: { isActive: boolean }): string {
   return `nav-item${isActive ? ' nav-item-active' : ''}`
 }
 
+// Nimiq Pay already shows its own TESTNET badge, but that's the host app's
+// signal, not Stash's own — without this, Stash's own screens give no
+// indication these are test funds. Reads from config so it disappears on a
+// mainnet build rather than needing a code change.
+const isTestnet = import.meta.env.VITE_NIMIQ_NETWORK !== 'mainnet'
+
 export function Shell() {
   const { wallet, consensus } = useAppState()
   const navigate = useNavigate()
@@ -31,6 +37,7 @@ export function Shell() {
         </button>
 
         <div className="wallet-chip-wrap">
+          {isTestnet && <span className="network-badge">Testnet</span>}
           <button
             className="wallet-chip"
             onClick={() => setWalletDisclosureOpen((v) => !v)}

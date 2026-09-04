@@ -82,6 +82,28 @@
   position: relative;
   justify-self: end;
   min-width: 0;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.network-badge {
+  /* Stacked above the wallet chip, not beside it — side-by-side, the
+     connected chip's fixed-width shortened address (shortenAddress always
+     returns ~13 chars) plus the badge no longer fit the right grid column
+     on a phone-width screen and overflowed left into the Activity button.
+     Stacking keeps the column's width requirement at just the wider of
+     the two instead of their sum. */
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  color: var(--color-ink-soft);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .wallet-chip {
